@@ -1,4 +1,5 @@
 This repository is no longer actively maintained.
+This is a fork by add by barcode and consume by barcode.
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
 
