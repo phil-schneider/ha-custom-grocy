@@ -1,7 +1,6 @@
 {
   "name": "Grocy custom component - barcode",
   "render_readme": true,
-  "zip_release": true,
   "hide_default_branch": true,
   "homeassistant": "2024.12.0"
 }
