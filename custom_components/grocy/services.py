@@ -10,6 +10,7 @@ from .const import ATTR_CHORES, ATTR_TASKS, DOMAIN
 from .coordinator import GrocyDataUpdateCoordinator
 
 SERVICE_PRODUCT_ID = "product_id"
+SERVICE_BARCODE = "barcode"
 SERVICE_AMOUNT = "amount"
 SERVICE_PRICE = "price"
 SERVICE_SPOILED = "spoiled"
@@ -26,8 +27,10 @@ SERVICE_BATTERY_ID = "battery_id"
 SERVICE_OBJECT_ID = "object_id"
 
 SERVICE_ADD_PRODUCT = "add_product_to_stock"
+SERVICE_ADD_PRODUCT_BY_BARCODE = "add_product_to_stock_by_barcode"
 SERVICE_OPEN_PRODUCT = "open_product"
 SERVICE_CONSUME_PRODUCT = "consume_product_from_stock"
+SERVICE_CONSUME_PRODUCT_BY_BARCODE = "consume_product_from_stock_by_barcode"
 SERVICE_EXECUTE_CHORE = "execute_chore"
 SERVICE_COMPLETE_TASK = "complete_task"
 SERVICE_ADD_GENERIC = "add_generic"
@@ -40,6 +43,16 @@ SERVICE_ADD_PRODUCT_SCHEMA = vol.All(
     vol.Schema(
         {
             vol.Required(SERVICE_PRODUCT_ID): vol.Coerce(int),
+            vol.Required(SERVICE_AMOUNT): vol.Coerce(float),
+            vol.Optional(SERVICE_PRICE): str,
+        }
+    )
+)
+
+SERVICE_ADD_PRODUCT_BY_BARCODE_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Required(SERVICE_BARCODE): vol.Coerce(str),
             vol.Required(SERVICE_AMOUNT): vol.Coerce(float),
             vol.Optional(SERVICE_PRICE): str,
         }
@@ -60,6 +73,18 @@ SERVICE_CONSUME_PRODUCT_SCHEMA = vol.All(
     vol.Schema(
         {
             vol.Required(SERVICE_PRODUCT_ID): vol.Coerce(int),
+            vol.Required(SERVICE_AMOUNT): vol.Coerce(float),
+            vol.Optional(SERVICE_SPOILED): bool,
+            vol.Optional(SERVICE_SUBPRODUCT_SUBSTITUTION): bool,
+            vol.Optional(SERVICE_TRANSACTION_TYPE): str,
+        }
+    )
+)
+
+SERVICE_CONSUME_PRODUCT_BY_BARCODE_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Required(SERVICE_BARCODE): vol.Coerce(str),
             vol.Required(SERVICE_AMOUNT): vol.Coerce(float),
             vol.Optional(SERVICE_SPOILED): bool,
             vol.Optional(SERVICE_SUBPRODUCT_SUBSTITUTION): bool,
@@ -132,8 +157,10 @@ SERVICE_TRACK_BATTERY_SCHEMA = vol.All(
 
 SERVICES_WITH_ACCOMPANYING_SCHEMA: list[tuple[str, vol.Schema]] = [
     (SERVICE_ADD_PRODUCT, SERVICE_ADD_PRODUCT_SCHEMA),
+    (SERVICE_ADD_PRODUCT_BY_BARCODE, SERVICE_ADD_PRODUCT_BY_BARCODE_SCHEMA),
     (SERVICE_OPEN_PRODUCT, SERVICE_OPEN_PRODUCT_SCHEMA),
     (SERVICE_CONSUME_PRODUCT, SERVICE_CONSUME_PRODUCT_SCHEMA),
+    (SERVICE_CONSUME_PRODUCT_BY_BARCODE, SERVICE_CONSUME_PRODUCT_BY_BARCODE_SCHEMA),
     (SERVICE_EXECUTE_CHORE, SERVICE_EXECUTE_CHORE_SCHEMA),
     (SERVICE_COMPLETE_TASK, SERVICE_COMPLETE_TASK_SCHEMA),
     (SERVICE_ADD_GENERIC, SERVICE_ADD_GENERIC_SCHEMA),
@@ -160,11 +187,17 @@ async def async_setup_services(
         if service == SERVICE_ADD_PRODUCT:
             await async_add_product_service(hass, coordinator, service_data)
 
+        elif service == SERVICE_ADD_PRODUCT_BY_BARCODE:
+            await async_add_product_by_barcode_service(hass, coordinator, service_data)
+
         elif service == SERVICE_OPEN_PRODUCT:
             await async_open_product_service(hass, coordinator, service_data)
 
         elif service == SERVICE_CONSUME_PRODUCT:
             await async_consume_product_service(hass, coordinator, service_data)
+
+        elif service == SERVICE_CONSUME_PRODUCT_BY_BARCODE:
+            await async_consume_product_by_barcode_service(hass, coordinator, service_data)
 
         elif service == SERVICE_EXECUTE_CHORE:
             await async_execute_chore_service(hass, coordinator, service_data)
@@ -211,6 +244,16 @@ async def async_add_product_service(hass, coordinator, data):
 
     await hass.async_add_executor_job(wrapper)
 
+async def async_add_product_by_barcode_service(hass, coordinator, data):
+    """Add a product by barcode in Grocy."""
+    barcode = data[SERVICE_BARCODE]
+    amount = data[SERVICE_AMOUNT]
+    price = data.get(SERVICE_PRICE, "")
+
+    def wrapper():
+        coordinator.grocy_api.add_product_by_barcode(barcode, amount, price)
+
+    await hass.async_add_executor_job(wrapper)
 
 async def async_open_product_service(hass, coordinator, data):
     """Open a product in Grocy."""
@@ -242,6 +285,32 @@ async def async_consume_product_service(hass, coordinator, data):
     def wrapper():
         coordinator.grocy_api.consume_product(
             product_id,
+            amount,
+            spoiled=spoiled,
+            transaction_type=transaction_type,
+            allow_subproduct_substitution=allow_subproduct_substitution,
+        )
+
+    await hass.async_add_executor_job(wrapper)
+
+
+
+async def async_consume_product_by_barcode_service(hass, coordinator, data):
+    """Consume a product by barcode in Grocy."""
+    barcode = data[SERVICE_BARCODE]
+    amount = data[SERVICE_AMOUNT]
+    spoiled = data.get(SERVICE_SPOILED, False)
+    allow_subproduct_substitution = data.get(SERVICE_SUBPRODUCT_SUBSTITUTION, False)
+
+    transaction_type_raw = data.get(SERVICE_TRANSACTION_TYPE, None)
+    transaction_type = TransactionType.CONSUME
+
+    if transaction_type_raw is not None:
+        transaction_type = TransactionType[transaction_type_raw]
+
+    def wrapper():
+        coordinator.grocy_api.consume_product_by_barcode(
+            barcode,
             amount,
             spoiled=spoiled,
             transaction_type=transaction_type,
