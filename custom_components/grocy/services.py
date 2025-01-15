@@ -86,7 +86,7 @@ SERVICE_CONSUME_PRODUCT_BY_BARCODE_SCHEMA = vol.All(
         {
             vol.Required(SERVICE_BARCODE): vol.Coerce(str),
             vol.Required(SERVICE_AMOUNT): vol.Coerce(float),
-            vol.Optional(SERVICE_TRANSACTION_TYPE): str,
+            vol.Optional(SERVICE_SPOILED): bool,
         }
     )
 )
@@ -297,22 +297,12 @@ async def async_consume_product_by_barcode_service(hass, coordinator, data):
     """Consume a product by barcode in Grocy."""
     barcode = data[SERVICE_BARCODE]
     amount = data[SERVICE_AMOUNT]
-    spoiled = False
-    allow_subproduct_substitution = False
-
-    transaction_type_raw = data.get(SERVICE_TRANSACTION_TYPE, None)
-    transaction_type = TransactionType.CONSUME
-
-    if transaction_type_raw is not None:
-        transaction_type = TransactionType[transaction_type_raw]
-
+    spoiled = data.get(SERVICE_SPOILED, False)
     def wrapper():
         coordinator.grocy_api.consume_product_by_barcode(
             barcode,
             amount,
-            spoiled=spoiled,
-            transaction_type=transaction_type,
-            allow_subproduct_substitution=allow_subproduct_substitution,
+            spoiled=spoiled
         )
 
     await hass.async_add_executor_job(wrapper)

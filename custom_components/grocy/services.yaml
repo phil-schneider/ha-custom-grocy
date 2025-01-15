@@ -161,26 +161,6 @@ consume_product_from_stock_by_barcode:
       default: false
       selector:
         boolean:
-    allow_subproduct_substitution:
-      name: Subproduct substitution
-      description: If subproduct substitution is allowed
-      example: false
-      default: false
-      selector:
-        boolean:
-    transaction_type:
-      name: Transaction Type
-      description: The type of the transaction.
-      required: true
-      example: "CONSUME"
-      default: "CONSUME"
-      selector:
-        select:
-          options:
-            - "CONSUME"
-            - "PURCHASE"
-            - "INVENTORY_CORRECTION"
-            - "PRODUCT_OPENED"
 
 execute_chore:
   name: Execute Chore
