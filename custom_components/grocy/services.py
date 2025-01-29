@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from pygrocy2.grocy import EntityType, TransactionType
+import logging
 
 from .const import ATTR_CHORES, ATTR_TASKS, DOMAIN
 from .coordinator import GrocyDataUpdateCoordinator
@@ -38,6 +39,8 @@ SERVICE_UPDATE_GENERIC = "update_generic"
 SERVICE_DELETE_GENERIC = "delete_generic"
 SERVICE_CONSUME_RECIPE = "consume_recipe"
 SERVICE_TRACK_BATTERY = "track_battery"
+
+_LOGGER = logging.getLogger(__name__)
 
 SERVICE_ADD_PRODUCT_SCHEMA = vol.All(
     vol.Schema(
@@ -177,7 +180,7 @@ async def async_setup_services(
     if hass.services.async_services().get(DOMAIN):
         return
 
-    async def async_call_grocy_service(service_call: ServiceCall) -> None:
+    async def async_call_grocy_service(service_call: ServiceCall) -> ServiceResponse | None:
         """Call correct Grocy service."""
         service = service_call.service
         service_data = service_call.data
@@ -186,8 +189,10 @@ async def async_setup_services(
             await async_add_product_service(hass, coordinator, service_data)
 
         elif service == SERVICE_ADD_PRODUCT_BY_BARCODE:
-            await async_add_product_by_barcode_service(hass, coordinator, service_data)
-
+            _LOGGER.warning("Calling add_product_by_barcode")
+            myResponse = await async_add_product_by_barcode_service(hass, coordinator, service_data)
+            _LOGGER.warning("add_product_by_barcode response: %s", myResponse)
+            return myResponse
         elif service == SERVICE_OPEN_PRODUCT:
             await async_open_product_service(hass, coordinator, service_data)
 
@@ -195,8 +200,10 @@ async def async_setup_services(
             await async_consume_product_service(hass, coordinator, service_data)
 
         elif service == SERVICE_CONSUME_PRODUCT_BY_BARCODE:
-            await async_consume_product_by_barcode_service(hass, coordinator, service_data)
-
+            _LOGGER.warning("Calling consume_product_by_barcode")
+            myResponse = await async_consume_product_by_barcode_service(hass, coordinator, service_data)
+            _LOGGER.warning("consume_product_by_barcode response: %s", myResponse)
+            return myResponse
         elif service == SERVICE_EXECUTE_CHORE:
             await async_execute_chore_service(hass, coordinator, service_data)
 
@@ -217,9 +224,11 @@ async def async_setup_services(
 
         elif service == SERVICE_TRACK_BATTERY:
             await async_track_battery_service(hass, coordinator, service_data)
-
+        
+        return None
+        
     for service, schema in SERVICES_WITH_ACCOMPANYING_SCHEMA:
-        hass.services.async_register(DOMAIN, service, async_call_grocy_service, schema)
+        hass.services.async_register(DOMAIN, service, async_call_grocy_service, schema, SupportsResponse.ONLY)
 
 
 async def async_unload_services(hass: HomeAssistant) -> None:
@@ -242,16 +251,23 @@ async def async_add_product_service(hass, coordinator, data):
 
     await hass.async_add_executor_job(wrapper)
 
-async def async_add_product_by_barcode_service(hass, coordinator, data):
+async def async_add_product_by_barcode_service(hass, coordinator, data) -> ServiceResponse :
     """Add a product by barcode in Grocy."""
     barcode = data[SERVICE_BARCODE]
     amount = data[SERVICE_AMOUNT]
     price = data.get(SERVICE_PRICE, "")
 
     def wrapper():
-        coordinator.grocy_api.add_product_by_barcode(barcode, amount, price)
+        return coordinator.grocy_api.add_product_by_barcode(barcode, amount, price)
 
-    await hass.async_add_executor_job(wrapper)
+    product = await hass.async_add_executor_job(wrapper)
+    # Convert Product object to a JSON-serializable dictionary
+    product_dict = {
+        "id": product.id,
+        "name": product.name,
+        "available_amount": product.available_amount,
+    }
+    return product_dict
 
 async def async_open_product_service(hass, coordinator, data):
     """Open a product in Grocy."""
@@ -293,19 +309,26 @@ async def async_consume_product_service(hass, coordinator, data):
 
 
 
-async def async_consume_product_by_barcode_service(hass, coordinator, data):
+async def async_consume_product_by_barcode_service(hass, coordinator, data) -> ServiceResponse:
     """Consume a product by barcode in Grocy."""
     barcode = data[SERVICE_BARCODE]
     amount = data[SERVICE_AMOUNT]
     spoiled = data.get(SERVICE_SPOILED, False)
     def wrapper():
-        coordinator.grocy_api.consume_product_by_barcode(
+        return coordinator.grocy_api.consume_product_by_barcode(
             barcode,
             amount,
             spoiled=spoiled
         )
 
-    await hass.async_add_executor_job(wrapper)
+    product = await hass.async_add_executor_job(wrapper)
+    # Convert Product object to a JSON-serializable dictionary
+    product_dict = {
+        "id": product.id,
+        "name": product.name,
+        "available_amount": product.available_amount,
+    }
+    return product_dict
 
 
 async def async_execute_chore_service(hass, coordinator, data):
